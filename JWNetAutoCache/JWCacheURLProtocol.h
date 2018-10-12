@@ -7,9 +7,33 @@
 //
 
 #import <Foundation/Foundation.h>
+@class JWCacheURLProtocol;
+@protocol JWCacheURLProtocolDelegate <NSObject>
+
+
+/**
+ 是否應該緩存這個請求
+
+ @param JWCacheURLProtocol <#JWCacheURLProtocol description#>
+ @param request <#request description#>
+ @return <#return value description#>
+ */
+- (BOOL)JWCacheURLProtocol:(JWCacheURLProtocol *)JWCacheURLProtocol shouldCacheRequest:(NSURLRequest *)request;
+
+
+@optional
+/**
+ 對於已經緩存的請求，下次更新數據的間隙
+
+ @param JWCacheURLProtocol <#JWCacheURLProtocol description#>
+ @param request <#request description#>
+ @return 返回緩存的請求，間隙多久后，重新更新數據
+ */
+- (NSInteger)JWCacheURLProtocol:(JWCacheURLProtocol *)JWCacheURLProtocol backgroundUpdateIntervalWithRequest:(NSURLRequest *)request;
+
+@end
 
 @interface JWCacheURLProtocol : NSURLProtocol<NSURLSessionDataDelegate>
-
 
 @property (readwrite, nonatomic, strong) NSURLSessionConfiguration *config;//config是全局的，所有的网络请求都用这个config
 
@@ -21,4 +45,12 @@
 + (void)setConfig:(NSURLSessionConfiguration *)config;//config是全局的，所有的网络请求都用这个config，参见NSURLSession使用的NSURLSessionConfiguration
 + (void)setUpdateInterval:(NSInteger)updateInterval;//相同的url地址请求，相隔大于等于updateInterval才会发出后台更新的网络请求，小于的话不发出请求。默认是3600秒，1个小时
 + (void)clearUrlDict;//收到内存警告的时候可以调用这个方法清空内存中的url记录
+@end
+
+@interface JWUrlCacheConfig: NSObject
+
++ (instancetype)instance;
+
+@property (nonatomic, assign) id<JWCacheURLProtocolDelegate> delegate;
+
 @end

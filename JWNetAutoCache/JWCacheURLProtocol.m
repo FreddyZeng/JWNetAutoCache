@@ -9,8 +9,9 @@
 
 
 #import "JWCacheURLProtocol.h"
+#import "NSURLSessionConfiguration+AutoCache.h"
 
-@interface JWUrlCacheConfig: NSObject
+@interface JWUrlCacheConfig()
 
 @property (readwrite, nonatomic, strong) NSMutableDictionary *urlDict;//记录上一次url请求时间
 @property (readwrite, nonatomic, assign) NSInteger updateInterval;//相同的url地址请求，相隔大于等于updateInterval才会发出后台更新的网络请求，小于的话不发出请求。
@@ -20,7 +21,7 @@
 
 @end
 
-#define DefaultUpdateInterval 3600
+#define DefaultUpdateInterval 600
 @implementation JWUrlCacheConfig
 
 
@@ -92,10 +93,12 @@ static NSString * const checkUpdateInBgKey = @"checkUpdateInBg";
 
 + (void)startListeningNetWorking{
     [NSURLProtocol registerClass:[JWCacheURLProtocol class]];
+    [NSURLSessionConfiguration.class exchangeDefaultSessionConfigurationImplementations];
 }
 
 + (void)cancelListeningNetWorking{
     [NSURLProtocol unregisterClass:[JWCacheURLProtocol class]];
+    [NSURLSessionConfiguration.class exchangeDefaultSessionConfigurationImplementations];
 }
 
 + (void)setConfig:(NSURLSessionConfiguration *)config{
@@ -133,7 +136,13 @@ static NSString * const checkUpdateInBgKey = @"checkUpdateInBg";
             //判读两次相同的url地址发出请求相隔的时间，如果相隔的时间小于给定的时间，不发出请求。否则发出网络请求
             NSDate *currentDate = [NSDate date];
             NSInteger interval = [currentDate timeIntervalSinceDate:updateDate];
-            if (interval < [JWUrlCacheConfig instance].updateInterval) {
+            
+            if ([[JWUrlCacheConfig instance].delegate respondsToSelector:@selector(JWCacheURLProtocol:backgroundUpdateIntervalWithRequest:)]) {
+                NSInteger updateInterval = [[JWUrlCacheConfig instance].delegate JWCacheURLProtocol:weakSelf backgroundUpdateIntervalWithRequest:weakSelf.request];
+                if (interval < updateInterval) {
+                    return ;
+                }
+            }else if (interval < [JWUrlCacheConfig instance].updateInterval) {
                 return;
             }
         }
@@ -215,8 +224,18 @@ static NSString * const checkUpdateInBgKey = @"checkUpdateInBg";
         if (!self.data) {
             return;
         }
-        NSCachedURLResponse *cacheUrlResponse = [[NSCachedURLResponse alloc] initWithResponse:task.response data:self.data];
-        [[NSURLCache sharedURLCache] storeCachedResponse:cacheUrlResponse forRequest:self.request];
+        if ([[JWUrlCacheConfig instance].delegate respondsToSelector:@selector(JWCacheURLProtocol:shouldCacheRequest:)]) {
+            
+            BOOL shouldCache = [[JWUrlCacheConfig instance].delegate JWCacheURLProtocol:self shouldCacheRequest:self.request];
+            if (shouldCache) {
+                NSCachedURLResponse *cacheUrlResponse = [[NSCachedURLResponse alloc] initWithResponse:task.response data:self.data];
+                [[NSURLCache sharedURLCache] storeCachedResponse:cacheUrlResponse forRequest:self.request];
+            }
+//            }else {
+//                [[NSURLCache sharedURLCache] removeCachedResponseForRequest:self.request];
+//                [[JWUrlCacheConfig instance].urlDict removeObjectForKey:self.request.URL.absoluteString];
+//            }
+        }
         self.data = nil;
     }
 }
